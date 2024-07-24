@@ -1,0 +1,127 @@
+import openpyxl
+
+# Вводные данные
+employees = {
+    "Шпалерная": [
+        "Белая Екатерина Вячеславовна",
+        "Белоусова Инна Юрьевна",
+        "Бутылин Даниил Юрьевич",
+        "Ванюхина Оксана Валерьевна",
+        "Вишневская Полина Евгеньевна",
+        "Выржиковский Максим Александрович",
+        "Горбунова Татьяна Алексеевна",
+        "Жирехина Жанна Сергеевна",
+        "Зернюк Василий Юрьевич",
+        "Иванова Ирина Валерьевна",
+        "Мирон Даниил Васильевич",
+        "Михеева Валерия Алексеевна",
+        "Оганджанян Карина Генриховна",
+        "Сазонов Вадим Викторович",
+        "Сысоев Даниил Сергеевич",
+        "Чеснокова Ольга Ивановна",
+        "Ярош Мария Андреевна",
+        "Ястребова Анна Александровна"
+    ],
+    "Гатчинская": [
+        "Гулакова Алина Игоревна",
+        "Еремкин Василий Сергеевич",
+        "Логвиненко Антон Александрович",
+        "Луканин Михаил Евгеньевич",
+        "Пиотровская Вероника Раймондовна",
+        "Пошибайлов Михаил Александрович",
+        "Фицов Александр Владленович",
+        "Шалина Наталья Константиновна",
+        "Казаков Виталий Олегович",
+        "Комлева Ксения Сергеевна"
+    ]
+}
+
+shifts = ["10-16", "16-22"]
+branches = {
+    "Шпалерная": ["Room1", "Room2", "Room3", "Room4", "Room5"],
+    "Гатчинская": ["Room1", "Room2", "Room3", "Room4", "Room5", "Room6", "Room7", "Room8", "Room9", "Room10", "Room11"]
+}
+
+def load_preferences_from_excel(file_path):
+    wb = openpyxl.load_workbook(file_path)
+    sheet = wb.active
+    preferences = {}
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        employee, shifts_str = row
+        shifts = shifts_str.split(',') if shifts_str else []
+        if shifts:
+            preferences[employee] = {"shifts": shifts}
+    return preferences
+
+def generate_weekly_schedule(employees, branches, shifts, preferences, days=7):
+    # Инициализация недельного расписания
+    weekly_schedule = {day: {branch: {shift: {room: None for room in branches[branch]} for shift in shifts} for branch in branches} for day in range(days)}
+    # Инициализация закрепленных кабинетов за сотрудниками
+    employee_rooms = {branch: {employee: None for employee in employees[branch] if employee in preferences} for branch in branches}
+
+    for day in range(days):
+        for branch in branches:
+            schedule = generate_daily_schedule([emp for emp in employees[branch] if emp in preferences], branches[branch], shifts, preferences, employee_rooms[branch])
+            for shift in shifts:
+                for room in branches[branch]:
+                    weekly_schedule[day][branch][shift][room] = schedule[shift][room]
+    
+    return weekly_schedule
+
+def generate_daily_schedule(employees, rooms, shifts, preferences, employee_rooms):
+    schedule = {shift: {room: None for room in rooms} for shift in shifts}
+    assigned = {employee: False for employee in employees}
+
+    # Назначение сотрудников с учетом предпочтений смен
+    for employee in employees:
+        if employee in preferences:
+            for shift in preferences[employee]["shifts"]:
+                for room in rooms:
+                    if schedule[shift][room] is None and (employee_rooms[employee] is None or employee_rooms[employee] == room):
+                        schedule[shift][room] = employee
+                        assigned[employee] = True
+                        employee_rooms[employee] = room
+                        break
+                if assigned[employee]:
+                    break
+
+    return schedule
+
+def create_schedule_table(weekly_schedule, branches):
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    tables = {}
+
+    for branch in branches:
+        table = {room: [""] * 7 for room in branches[branch]}
+
+        for day in range(7):
+            for shift in shifts:
+                for room in branches[branch]:
+                    employee = weekly_schedule[day][branch][shift][room]
+                    if employee:
+                        table[room][day] += f"{employee} ({shift})\n"
+
+        tables[branch] = table
+
+    return tables
+
+def print_schedule_table(tables):
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    for branch, table in tables.items():
+        print(f"\n{branch} Schedule:\n")
+        header = "Room\t" + "\t".join(days)
+        print(header)
+        print("-" * len(header.expandtabs()))
+        for room, schedule in table.items():
+            print(f"{room}\t" + "\t".join(schedule))
+
+# Путь к файлу Excel с предпочтениями
+file_path = "preferences.xlsx"
+preferences = load_preferences_from_excel(file_path)
+
+# Генерация недельного расписания для всех филиалов
+weekly_schedule = generate_weekly_schedule(employees, branches, shifts, preferences)
+
+# Создание и вывод таблицы расписания
+tables = create_schedule_table(weekly_schedule, branches)
+print_schedule_table(tables)
